@@ -21,7 +21,6 @@ class RedisManager:
                 self._client = redis.from_url(
                     settings.REDIS_URL,
                     decode_responses=True,
-                    ssl=True,  # Upstash TLS
                 )
             else:
                 # 本地开发或 URL 无效时用内存字典模拟

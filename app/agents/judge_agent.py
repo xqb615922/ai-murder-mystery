@@ -2,6 +2,7 @@
 
 分析玩家的推理，判断是否正确，给出详细点评
 """
+from typing import Optional
 from app.core.llm import chat_json
 import json
 
@@ -43,7 +44,7 @@ def judge(
     scenario: dict,
     player_guess: str,
     player_reasoning: str,
-    model: str | None = None,
+    model: Optional[str] = None,
 ) -> dict:
     """评判玩家的推理"""
     # 找到凶手

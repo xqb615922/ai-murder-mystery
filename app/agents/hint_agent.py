@@ -3,6 +3,7 @@
 根据玩家已发现的线索和审问记录，给出渐进式提示
 提示分三级：弱提示 → 中提示 → 强提示
 """
+from typing import Optional
 from app.core.llm import chat
 
 
@@ -51,7 +52,7 @@ def give_hint(
     clues_found: list[str],
     chat_history: dict,
     hints_used: int,
-    model: str | None = None,
+    model: Optional[str] = None,
 ) -> str:
     """生成渐进式提示"""
     # 嫌疑人概览

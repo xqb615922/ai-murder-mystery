@@ -5,6 +5,7 @@
 - 无辜者会隐瞒秘密，但不会编造虚假不在场证明
 - 审问轮数有限，玩家需要策略性选择问题
 """
+from typing import Optional
 from app.core.llm import chat
 
 
@@ -90,7 +91,7 @@ def build_suspect_prompt(suspect: dict, scenario: dict, chat_history: list[dict]
 """
 
 
-def interrogate(suspect: dict, scenario: dict, question: str, chat_history: list[dict], model: str | None = None) -> str:
+def interrogate(suspect: dict, scenario: dict, question: str, chat_history: list[dict], model: Optional[str] = None) -> str:
     """审问嫌疑人"""
     system_prompt = build_suspect_prompt(suspect, scenario, chat_history)
     return chat(system_prompt, question, temperature=0.8, model=model)

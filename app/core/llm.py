@@ -1,4 +1,5 @@
 """AI 剧本杀 - LLM 客户端"""
+from typing import Optional
 from openai import OpenAI
 from app.core.config import settings
 
@@ -8,7 +9,7 @@ client = OpenAI(
 )
 
 
-def chat(system_prompt: str, user_message: str, temperature: float = 0.7, model: str | None = None) -> str:
+def chat(system_prompt: str, user_message: str, temperature: float = 0.7, model: Optional[str] = None) -> str:
     """简单对话接口"""
     model_name = model or settings.LLM_MODEL
     try:
@@ -29,6 +30,6 @@ def chat(system_prompt: str, user_message: str, temperature: float = 0.7, model:
         )
 
 
-def chat_json(system_prompt: str, user_message: str, temperature: float = 0.5, model: str | None = None) -> str:
+def chat_json(system_prompt: str, user_message: str, temperature: float = 0.5, model: Optional[str] = None) -> str:
     """对话接口（低温度，输出更确定）"""
     return chat(system_prompt, user_message, temperature=temperature, model=model)

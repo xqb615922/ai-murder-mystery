@@ -79,64 +79,66 @@ def start_game(nickname: str = "侦探", scene: str = "random", model: str = "",
     """开始新游戏：AI 生成剧本"""
     game_id = str(uuid.uuid4())[:8]
 
-    # 1. 生成剧本
     try:
+        # 1. 生成剧本
         selected_model = model or None
         scenario = generate_script(scene=scene, model=selected_model)
+
+        # 2. 索引线索
+        scenario_text = f"{scenario['setting']} 死者：{scenario['victim']['name']}"
+        clue_manager.index_clues(game_id, scenario["clues"], scenario_text)
+
+        # 3. 保存会话到 Redis
+        redis_mgr.save_session(game_id, {
+            "scenario": scenario,
+            "chat_history": {},
+            "clues_found": [],
+            "rounds": {},
+            "hints_used": 0,
+            "model": selected_model,
+        }, ttl=7200)
+
+        # 4. 写入数据库
+        user = db.query(User).filter(User.nickname == nickname).first()
+        game = Game(
+            user_id=user.id if user else None,
+            title=scenario["title"],
+            scenario=scenario,
+            culprit_id=next(s["id"] for s in scenario["suspects"] if s.get("is_culprit")),
+        )
+        db.add(game)
+        db.commit()
+
+        # 5. 返回前端需要的数据（隐藏凶手标记和干扰项标记）
+        suspects_safe = []
+        for s in scenario["suspects"]:
+            suspects_safe.append({
+                "id": s["id"],
+                "name": s["name"],
+                "age": s["age"],
+                "occupation": s["occupation"],
+                "personality": s["personality"],
+                "alibi": s["alibi"],
+                "testimony": s["testimony"],
+            })
+
+        clues_safe = [{"id": c["id"], "description": c["description"], "location": c["location"]}
+                      for c in scenario["clues"]]
+
+        redis_mgr.incr_online()
+
+        return StartGameResp(
+            game_id=game_id,
+            title=scenario["title"],
+            setting=scenario["setting"],
+            victim=scenario["victim"],
+            suspects=suspects_safe,
+            clues=clues_safe,
+        )
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(500, f"生成剧本失败: {str(e)}")
-
-    # 2. 索引线索
-    scenario_text = f"{scenario['setting']} 死者：{scenario['victim']['name']}"
-    clue_manager.index_clues(game_id, scenario["clues"], scenario_text)
-
-    # 3. 保存会话到 Redis
-    redis_mgr.save_session(game_id, {
-        "scenario": scenario,
-        "chat_history": {},  # suspect_id -> [messages]
-        "clues_found": [],
-        "rounds": {},
-        "hints_used": 0,     # 已使用提示次数
-        "model": selected_model,
-    }, ttl=7200)  # 2小时
-
-    # 4. 写入数据库
-    user = db.query(User).filter(User.nickname == nickname).first()
-    game = Game(
-        user_id=user.id if user else None,
-        title=scenario["title"],
-        scenario=scenario,
-        culprit_id=next(s["id"] for s in scenario["suspects"] if s.get("is_culprit")),
-    )
-    db.add(game)
-    db.commit()
-
-    # 5. 返回前端需要的数据（隐藏凶手标记和干扰项标记）
-    suspects_safe = []
-    for s in scenario["suspects"]:
-        suspects_safe.append({
-            "id": s["id"],
-            "name": s["name"],
-            "age": s["age"],
-            "occupation": s["occupation"],
-            "personality": s["personality"],
-            "alibi": s["alibi"],
-            "testimony": s["testimony"],
-        })
-
-    clues_safe = [{"id": c["id"], "description": c["description"], "location": c["location"]}
-                  for c in scenario["clues"]]
-
-    redis_mgr.incr_online()
-
-    return StartGameResp(
-        game_id=game_id,
-        title=scenario["title"],
-        setting=scenario["setting"],
-        victim=scenario["victim"],
-        suspects=suspects_safe,
-        clues=clues_safe,
-    )
+        raise HTTPException(500, detail=f"生成剧本失败，请重试：{str(e)}")
 
 
 @router.post("/api/game/start-custom", response_model=StartGameResp)
@@ -144,58 +146,63 @@ def start_game_custom(req: StartGameReq, nickname: str = "侦探", model: str = 
     """开始自定义场景游戏"""
     game_id = str(uuid.uuid4())[:8]
 
-    # 1. 用自定义场景生成剧本
-    selected_model = model or None
-    scenario = generate_script(scene="custom", custom_scene=req.custom_scene, model=selected_model)
+    try:
+        # 1. 用自定义场景生成剧本
+        selected_model = model or None
+        scenario = generate_script(scene="custom", custom_scene=req.custom_scene, model=selected_model)
 
-    # 2-5 同上
-    scenario_text = f"{scenario['setting']} 死者：{scenario['victim']['name']}"
-    clue_manager.index_clues(game_id, scenario["clues"], scenario_text)
+        # 2-5 同上
+        scenario_text = f"{scenario['setting']} 死者：{scenario['victim']['name']}"
+        clue_manager.index_clues(game_id, scenario["clues"], scenario_text)
 
-    redis_mgr.save_session(game_id, {
-        "scenario": scenario,
-        "chat_history": {},
-        "clues_found": [],
-        "rounds": {},
-        "hints_used": 0,
-        "model": selected_model,
-    }, ttl=7200)
+        redis_mgr.save_session(game_id, {
+            "scenario": scenario,
+            "chat_history": {},
+            "clues_found": [],
+            "rounds": {},
+            "hints_used": 0,
+            "model": selected_model,
+        }, ttl=7200)
 
-    user = db.query(User).filter(User.nickname == nickname).first()
-    game = Game(
-        user_id=user.id if user else None,
-        title=scenario["title"],
-        scenario=scenario,
-        culprit_id=next(s["id"] for s in scenario["suspects"] if s.get("is_culprit")),
-    )
-    db.add(game)
-    db.commit()
+        user = db.query(User).filter(User.nickname == nickname).first()
+        game = Game(
+            user_id=user.id if user else None,
+            title=scenario["title"],
+            scenario=scenario,
+            culprit_id=next(s["id"] for s in scenario["suspects"] if s.get("is_culprit")),
+        )
+        db.add(game)
+        db.commit()
 
-    suspects_safe = []
-    for s in scenario["suspects"]:
-        suspects_safe.append({
-            "id": s["id"],
-            "name": s["name"],
-            "age": s["age"],
-            "occupation": s["occupation"],
-            "personality": s["personality"],
-            "alibi": s["alibi"],
-            "testimony": s["testimony"],
-        })
+        suspects_safe = []
+        for s in scenario["suspects"]:
+            suspects_safe.append({
+                "id": s["id"],
+                "name": s["name"],
+                "age": s["age"],
+                "occupation": s["occupation"],
+                "personality": s["personality"],
+                "alibi": s["alibi"],
+                "testimony": s["testimony"],
+            })
 
-    clues_safe = [{"id": c["id"], "description": c["description"], "location": c["location"]}
-                  for c in scenario["clues"]]
+        clues_safe = [{"id": c["id"], "description": c["description"], "location": c["location"]}
+                      for c in scenario["clues"]]
 
-    redis_mgr.incr_online()
+        redis_mgr.incr_online()
 
-    return StartGameResp(
-        game_id=game_id,
-        title=scenario["title"],
-        setting=scenario["setting"],
-        victim=scenario["victim"],
-        suspects=suspects_safe,
-        clues=clues_safe,
-    )
+        return StartGameResp(
+            game_id=game_id,
+            title=scenario["title"],
+            setting=scenario["setting"],
+            victim=scenario["victim"],
+            suspects=suspects_safe,
+            clues=clues_safe,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, detail=f"生成剧本失败，请重试：{str(e)}")
 
 
 @router.post("/api/game/interrogate")

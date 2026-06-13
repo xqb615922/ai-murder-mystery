@@ -364,6 +364,7 @@ createApp({
                     res = await fetch(`/api/game/start?${params}`, { method: 'POST' });
                 }
                 const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || '服务器错误');
                 game.value = data;
                 gameId.value = data.game_id;
                 page.value = 'game';

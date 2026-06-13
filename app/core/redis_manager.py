@@ -14,14 +14,14 @@ class RedisManager:
     @property
     def client(self) -> redis.Redis:
         if self._client is None:
-            if settings.REDIS_URL:
+            if settings.REDIS_URL and settings.REDIS_URL.startswith(("redis://", "rediss://")):
                 self._client = redis.from_url(
                     settings.REDIS_URL,
                     decode_responses=True,
                     ssl_cert_reqs=None,  # Upstash TLS
                 )
             else:
-                # 本地开发没有 Redis，用内存字典模拟
+                # 本地开发或 URL 无效时用内存字典模拟
                 self._client = FakeRedis()
         return self._client
 

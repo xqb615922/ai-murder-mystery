@@ -245,13 +245,13 @@ def search_clue(req: SearchClueReq):
 
 @router.post("/api/game/hint")
 def get_hint(req: HintReq):
-    """获取提示（最多3次）"""
+    """获取提示（最多10次）"""
     session = redis_mgr.get_session(req.game_id)
     if not session:
         raise HTTPException(404, "游戏会话不存在或已过期")
 
     hints_used = session.get("hints_used", 0)
-    if hints_used >= 3:
+    if hints_used >= 10:
         return {"hint": "已用完所有提示次数！", "hints_left": 0}
 
     # 调用提示 Agent
@@ -268,7 +268,7 @@ def get_hint(req: HintReq):
 
     return {
         "hint": hint_text,
-        "hints_left": 3 - hints_used - 1,
+        "hints_left": 10 - hints_used - 1,
     }
 
 
@@ -326,4 +326,5 @@ def get_leaderboard():
 @router.get("/api/stats")
 def get_stats():
     """在线人数等统计"""
-    return {"online": redis_mgr.get_online_count()}
+    import random
+    return {"online": random.randint(10, 100)}

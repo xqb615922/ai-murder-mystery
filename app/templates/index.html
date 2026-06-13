@@ -190,7 +190,7 @@
                         <h3 class="font-bold text-red-400">⚖️ 提交推理</h3>
                         <button @click="getHint" :disabled="hintLoading || hintsLeft <= 0"
                             class="px-3 py-1 bg-amber-700/50 border border-amber-600/50 rounded-lg text-xs font-bold text-amber-300 hover:bg-amber-700 disabled:opacity-40 transition-all">
-                            {{ hintLoading ? '💡 思考中...' : '💡 提示 (' + hintsLeft + '/3)' }}
+                            {{ hintLoading ? '💡 思考中...' : '💡 提示 (' + hintsLeft + '/10)' }}
                         </button>
                     </div>
                     <!-- 提示显示区 -->
@@ -297,7 +297,7 @@ createApp({
         const result = ref({});
 
         // 提示系统
-        const hintsLeft = ref(3);
+        const hintsLeft = ref(10);
         const currentHint = ref('');
         const hintLoading = ref(false);
 

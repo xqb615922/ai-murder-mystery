@@ -10,17 +10,23 @@ client = OpenAI(
 
 def chat(system_prompt: str, user_message: str, temperature: float = 0.7) -> str:
     """简单对话接口"""
-    resp = client.chat.completions.create(
-        model=settings.LLM_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        temperature=temperature,
-        # qwen3.6-plus 启用思考模式时需要设置
-        extra_body={"enable_thinking": False},
-    )
-    return resp.choices[0].message.content
+    try:
+        resp = client.chat.completions.create(
+            model=settings.LLM_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=temperature,
+            # qwen3.6-plus 启用思考模式时需要设置
+            extra_body={"enable_thinking": False},
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        raise RuntimeError(
+            f"LLM API 调用失败（{settings.LLM_MODEL}），"
+            f"请检查 DASHSCOPE_API_KEY 是否有效。原始错误: {e}"
+        )
 
 
 def chat_json(system_prompt: str, user_message: str, temperature: float = 0.5) -> str:

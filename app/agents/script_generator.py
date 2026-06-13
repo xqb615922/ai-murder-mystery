@@ -122,6 +122,12 @@ def generate_script(scene: str = "random", custom_scene: str = "") -> dict:
         # 如果解析失败，尝试提取 JSON 部分
         start = raw.find("{")
         end = raw.rfind("}") + 1
+        if start == -1 or end <= start:
+            # LLM 可能返回了错误文本（如 API Key 无效的 HTML 错误页）
+            snippet = raw[:200].replace("\n", " ")
+            raise RuntimeError(
+                f"LLM 返回内容无法解析为 JSON，前200字符: {snippet}"
+            )
         script = json.loads(raw[start:end])
 
     # 验证基本结构

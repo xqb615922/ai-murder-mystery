@@ -11,8 +11,9 @@ if "sqlite" in DB_URL:
     connect_args = {"check_same_thread": False}
     pool_kwargs = {}
 else:
-    # Supabase Transaction mode (pooler 6543) 需要
-    connect_args = {"prepared_statement": False, "statement_cache_size": 0}
+    # PostgreSQL（含 Supabase PgBouncer transaction mode）
+    # psycopg3: prepare_threshold=None 禁用服务端预编译，兼容 PgBouncer
+    connect_args = {"prepare_threshold": None}
     pool_kwargs = {
         "pool_size": 5,
         "max_overflow": 5,

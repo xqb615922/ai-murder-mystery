@@ -80,7 +80,10 @@ def start_game(nickname: str = "侦探", scene: str = "random", db: Session = De
     game_id = str(uuid.uuid4())[:8]
 
     # 1. 生成剧本
-    scenario = generate_script(scene=scene)
+    try:
+        scenario = generate_script(scene=scene)
+    except Exception as e:
+        raise HTTPException(500, f"生成剧本失败: {str(e)}")
 
     # 2. 索引线索
     scenario_text = f"{scenario['setting']} 死者：{scenario['victim']['name']}"

@@ -20,10 +20,22 @@
         @keyframes blink { 50% { opacity: 0; } }
         @keyframes pulseOnce { 0% { opacity: 0; transform: translateY(5px); } 100% { opacity: 1; transform: translateY(0); } }
         .animate-pulse-once { animation: pulseOnce 0.4s ease-out; }
+        @keyframes toastIn { 0% { opacity: 0; transform: translateX(100%); } 100% { opacity: 1; transform: translateX(0); } }
+        @keyframes toastOut { 0% { opacity: 1; transform: translateX(0); } 100% { opacity: 0; transform: translateX(100%); } }
+        .toast-enter { animation: toastIn 0.35s ease-out forwards; }
+        .toast-leave { animation: toastOut 0.35s ease-in forwards; }
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen">
 <div id="app">
+
+    <!-- Toast -->
+    <transition name="toast">
+        <div v-if="toastVisible" class="fixed top-6 right-6 z-50 bg-green-600 text-white px-5 py-3 rounded-lg shadow-2xl flex items-center gap-2 toast-enter" :class="toastLeaving ? 'toast-leave' : 'toast-enter'">
+            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+            <span>{{ toastMessage }}</span>
+        </div>
+    </transition>
 
     <!-- 注册页 -->
     <div v-if="page === 'register'" class="flex items-center justify-center min-h-screen">
@@ -314,6 +326,26 @@ createApp({
         const currentHint = ref('');
         const hintLoading = ref(false);
 
+        // Toast 提示
+        const toastVisible = ref(false);
+        const toastMessage = ref('');
+        const toastLeaving = ref(false);
+        let toastTimer = null;
+
+        function showToast(msg, duration = 2500) {
+            toastMessage.value = msg;
+            toastVisible.value = true;
+            toastLeaving.value = false;
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                toastLeaving.value = true;
+                toastTimer = setTimeout(() => {
+                    toastVisible.value = false;
+                    toastLeaving.value = false;
+                }, 350);
+            }, duration);
+        }
+
         const chatBox = ref(null);
 
         const currentChat = computed(() => {
@@ -368,6 +400,7 @@ createApp({
                 game.value = data;
                 gameId.value = data.game_id;
                 page.value = 'game';
+                showToast('已连接 Redis 与数据库，案件加载成功');
             } catch (e) {
                 alert('生成剧本失败，请重试：' + e.message);
             }
@@ -524,6 +557,7 @@ createApp({
             hintsLeft, currentHint, hintLoading,
             currentChat, totalRounds, chatBox,
             roundsLeft, suspectAvatar,
+            toastVisible, toastMessage, toastLeaving,
             startGame, selectSuspect, sendQuestion, searchClue, submitGuess, getHint, resetGame,
         };
     },

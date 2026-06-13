@@ -51,6 +51,7 @@ def give_hint(
     clues_found: list[str],
     chat_history: dict,
     hints_used: int,
+    model: str | None = None,
 ) -> str:
     """生成渐进式提示"""
     # 嫌疑人概览
@@ -97,4 +98,5 @@ def give_hint(
         system_prompt="你是剧本杀提示助手。给出简短有力的提示，50字以内，绝不说出凶手名字。",
         user_message=prompt,
         temperature=0.7,
+        model=model,
     )

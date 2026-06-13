@@ -43,6 +43,7 @@ def judge(
     scenario: dict,
     player_guess: str,
     player_reasoning: str,
+    model: str | None = None,
 ) -> dict:
     """评判玩家的推理"""
     # 找到凶手
@@ -67,6 +68,7 @@ def judge(
         system_prompt="你是专业剧本杀评委。只输出 JSON。",
         user_message=prompt,
         temperature=0.3,  # 低温度保证评判公正
+        model=model,
     )
 
     # 清理输出

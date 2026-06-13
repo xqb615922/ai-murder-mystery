@@ -90,7 +90,7 @@ def build_suspect_prompt(suspect: dict, scenario: dict, chat_history: list[dict]
 """
 
 
-def interrogate(suspect: dict, scenario: dict, question: str, chat_history: list[dict]) -> str:
+def interrogate(suspect: dict, scenario: dict, question: str, chat_history: list[dict], model: str | None = None) -> str:
     """审问嫌疑人"""
     system_prompt = build_suspect_prompt(suspect, scenario, chat_history)
-    return chat(system_prompt, question, temperature=0.8)
+    return chat(system_prompt, question, temperature=0.8, model=model)

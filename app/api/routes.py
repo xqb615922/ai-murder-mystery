@@ -75,13 +75,14 @@ def register(req: RegisterReq, db: Session = Depends(get_db)):
 
 
 @router.post("/api/game/start", response_model=StartGameResp)
-def start_game(nickname: str = "侦探", scene: str = "random", db: Session = Depends(get_db)) -> StartGameResp:
+def start_game(nickname: str = "侦探", scene: str = "random", model: str = "", db: Session = Depends(get_db)) -> StartGameResp:
     """开始新游戏：AI 生成剧本"""
     game_id = str(uuid.uuid4())[:8]
 
     # 1. 生成剧本
     try:
-        scenario = generate_script(scene=scene)
+        selected_model = model or None
+        scenario = generate_script(scene=scene, model=selected_model)
     except Exception as e:
         raise HTTPException(500, f"生成剧本失败: {str(e)}")
 
@@ -96,6 +97,7 @@ def start_game(nickname: str = "侦探", scene: str = "random", db: Session = De
         "clues_found": [],
         "rounds": {},
         "hints_used": 0,     # 已使用提示次数
+        "model": selected_model,
     }, ttl=7200)  # 2小时
 
     # 4. 写入数据库
@@ -138,12 +140,13 @@ def start_game(nickname: str = "侦探", scene: str = "random", db: Session = De
 
 
 @router.post("/api/game/start-custom", response_model=StartGameResp)
-def start_game_custom(req: StartGameReq, nickname: str = "侦探", db: Session = Depends(get_db)) -> StartGameResp:
+def start_game_custom(req: StartGameReq, nickname: str = "侦探", model: str = "", db: Session = Depends(get_db)) -> StartGameResp:
     """开始自定义场景游戏"""
     game_id = str(uuid.uuid4())[:8]
 
     # 1. 用自定义场景生成剧本
-    scenario = generate_script(scene="custom", custom_scene=req.custom_scene)
+    selected_model = model or None
+    scenario = generate_script(scene="custom", custom_scene=req.custom_scene, model=selected_model)
 
     # 2-5 同上
     scenario_text = f"{scenario['setting']} 死者：{scenario['victim']['name']}"
@@ -155,6 +158,7 @@ def start_game_custom(req: StartGameReq, nickname: str = "侦探", db: Session =
         "clues_found": [],
         "rounds": {},
         "hints_used": 0,
+        "model": selected_model,
     }, ttl=7200)
 
     user = db.query(User).filter(User.nickname == nickname).first()
@@ -215,7 +219,7 @@ def interrogate_suspect(req: InterrogateReq):
     history = session["chat_history"].get(req.suspect_id, [])
 
     # Agent 回复
-    answer = interrogate(suspect, scenario, req.question, history)
+    answer = interrogate(suspect, scenario, req.question, history, model=session.get("model"))
 
     # 更新会话
     history.append({"role": "player", "content": req.question})
@@ -263,6 +267,7 @@ def get_hint(req: HintReq):
         clues_found=session.get("clues_found", []),
         chat_history=session.get("chat_history", {}),
         hints_used=hints_used,
+        model=session.get("model"),
     )
 
     # 更新会话
@@ -285,7 +290,7 @@ def submit_guess(req: SubmitGuessReq, db: Session = Depends(get_db)):
     scenario = session["scenario"]
 
     # 评判
-    result = judge(scenario, req.culprit_id, req.reasoning)
+    result = judge(scenario, req.culprit_id, req.reasoning, model=session.get("model"))
 
     # 找到凶手名字
     culprit = next(s for s in scenario["suspects"] if s.get("is_culprit"))

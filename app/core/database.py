@@ -11,8 +11,10 @@ if "sqlite" in DB_URL:
     connect_args = {"check_same_thread": False}
     pool_kwargs = {}
 else:
-    # PostgreSQL（含 Supabase PgBouncer transaction mode）
-    # psycopg3: prepare_threshold=None 禁用服务端预编译，兼容 PgBouncer
+    # PostgreSQL：强制使用 psycopg (v3) 驱动，禁用预编译兼容 PgBouncer
+    if "postgresql" in DB_URL and "+psycopg" not in DB_URL:
+        DB_URL = DB_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+        DB_URL = DB_URL.replace("postgres://", "postgresql+psycopg://", 1)
     connect_args = {"prepare_threshold": None}
     pool_kwargs = {
         "pool_size": 5,

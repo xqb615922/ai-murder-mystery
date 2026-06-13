@@ -54,6 +54,17 @@
                         <textarea v-model="customScene" placeholder="描述你想要的案件场景，如：2030年火星基地，一名科学家在实验室离奇死亡..." rows="3"
                             class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-sm focus:border-amber-500 focus:outline-none resize-none"></textarea>
                     </div>
+                    <!-- 模型选择 -->
+                    <div class="text-left mt-3">
+                        <label class="text-gray-400 text-sm mb-1 block">选择 AI 模型</label>
+                        <div class="relative">
+                            <select v-model="selectedModel"
+                                class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-sm appearance-none focus:border-amber-500 focus:outline-none pr-10">
+                                <option v-for="m in modelList" :key="m" :value="m">{{ m }}</option>
+                            </select>
+                            <div class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">▾</div>
+                        </div>
+                    </div>
                 </div>
                 <button @click="startGame" :disabled="loading || !nickname.trim()"
                     class="w-full py-3 bg-gradient-to-r from-red-600 to-amber-600 rounded-xl text-lg font-bold hover:from-red-500 hover:to-amber-500 disabled:opacity-50 transition-all">
@@ -253,6 +264,8 @@ createApp({
         const stats = ref({ online: 0 });
         const selectedScene = ref('random');
         const customScene = ref('');
+        const selectedModel = ref('qwen3.6-plus');
+        const modelList = ['qwen3.7-plus', 'qwen3.7-max', 'qwen3.6-plus', 'deepseek-v4-flash', 'glm-5.1', 'kimi-k2.6'];
 
         const sceneList = [
             { value: 'luxury_cruise', emoji: '🚢', label: '豪华远洋游轮' },
@@ -336,7 +349,7 @@ createApp({
                 // 开始游戏
                 let res;
                 if (selectedScene.value === 'custom' && customScene.value.trim()) {
-                    const params = new URLSearchParams({ nickname: nickname.value });
+                    const params = new URLSearchParams({ nickname: nickname.value, model: selectedModel.value });
                     res = await fetch(`/api/game/start-custom?${params}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -346,6 +359,7 @@ createApp({
                     const params = new URLSearchParams({
                         nickname: nickname.value,
                         scene: selectedScene.value,
+                        model: selectedModel.value,
                     });
                     res = await fetch(`/api/game/start?${params}`, { method: 'POST' });
                 }
@@ -502,7 +516,7 @@ createApp({
         });
 
         return {
-            page, nickname, loading, stats, selectedScene, customScene, sceneList,
+            page, nickname, loading, stats, selectedScene, customScene, selectedModel, modelList, sceneList,
             game, gameId, selectedSuspect, chatHistories, question, typing, rounds,
             clueQuery, cluesFound,
             guessId, reasoning, judging, result,

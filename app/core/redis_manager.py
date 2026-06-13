@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import logging
+from urllib.parse import urlparse
 import redis
 from app.core.config import settings
 
@@ -14,16 +15,29 @@ class RedisManager:
     def __init__(self):
         self._client = None
 
+    def _create_redis_client(self) -> redis.Redis:
+        """手动解析 URL 创建 Redis 客户端，绕过 from_url 参数兼容问题"""
+        url = settings.REDIS_URL
+        parsed = urlparse(url)
+        return redis.Redis(
+            host=parsed.hostname,
+            port=parsed.port or 6379,
+            username=parsed.username,
+            password=parsed.password,
+            ssl=True,
+            decode_responses=True,
+        )
+
     @property
     def client(self) -> redis.Redis:
         if self._client is None:
             if settings.REDIS_URL and settings.REDIS_URL.startswith(("redis://", "rediss://")):
-                self._client = redis.from_url(
-                    settings.REDIS_URL,
-                    decode_responses=True,
-                )
+                try:
+                    self._client = self._create_redis_client()
+                except Exception as e:
+                    logger.warning(f"Redis 连接失败: {e}，降级为 FakeRedis")
+                    self._client = FakeRedis()
             else:
-                # 本地开发或 URL 无效时用内存字典模拟
                 logger.warning("REDIS_URL 无效或未配置，降级为 FakeRedis（内存模式，进程重启后数据丢失）")
                 self._client = FakeRedis()
         return self._client

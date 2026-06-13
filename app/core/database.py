@@ -6,10 +6,25 @@ from app.core.models import Base
 
 DB_URL = settings.effective_database_url
 
+# 连接参数：SQLite / PostgreSQL 分别配置
+if "sqlite" in DB_URL:
+    connect_args = {"check_same_thread": False}
+    pool_kwargs = {}
+else:
+    # Supabase Transaction mode (pooler 6543) 需要
+    connect_args = {"prepared_statement": False, "statement_cache_size": 0}
+    pool_kwargs = {
+        "pool_size": 5,
+        "max_overflow": 5,
+        "pool_recycle": 300,
+        "pool_pre_ping": True,
+    }
+
 engine = create_engine(
     DB_URL,
     echo=settings.DEBUG,
-    connect_args={"check_same_thread": False} if "sqlite" in DB_URL else {},
+    connect_args=connect_args,
+    **pool_kwargs,
 )
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)

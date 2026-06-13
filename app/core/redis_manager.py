@@ -15,7 +15,11 @@ class RedisManager:
     def client(self) -> redis.Redis:
         if self._client is None:
             if settings.REDIS_URL:
-                self._client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+                self._client = redis.from_url(
+                    settings.REDIS_URL,
+                    decode_responses=True,
+                    ssl_cert_reqs=None,  # Upstash TLS
+                )
             else:
                 # 本地开发没有 Redis，用内存字典模拟
                 self._client = FakeRedis()

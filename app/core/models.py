@@ -1,6 +1,6 @@
 """AI 剧本杀 - 数据库模型"""
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, ForeignKey, JSON, func
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -13,7 +13,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     nickname = Column(String(50), unique=True, nullable=False)
     avatar = Column(String(200), default="🕵️")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, server_default=func.now())
     total_games = Column(Integer, default=0)
     wins = Column(Integer, default=0)
 
@@ -34,7 +34,7 @@ class Game(Base):
     score = Column(Float, default=0)           # 得分
     rounds_played = Column(Integer, default=0) # 审问总轮数
     clues_found = Column(Integer, default=0)   # 发现线索数
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, server_default=func.now())
     finished_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="games")
@@ -49,7 +49,7 @@ class ChatLog(Base):
     suspect_id = Column(String(50))            # 嫌疑人 ID
     role = Column(String(20))                  # player / suspect
     content = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, server_default=func.now())
 
 
 class Leaderboard(Base):
@@ -62,4 +62,4 @@ class Leaderboard(Base):
     wins = Column(Integer, default=0)
     win_rate = Column(Float, default=0)
     avg_score = Column(Float, default=0)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, server_default=func.now())

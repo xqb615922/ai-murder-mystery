@@ -14,7 +14,12 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "qwen3.6-plus"
 
     # 数据库（Supabase / 本地）
-    DATABASE_URL: str = "sqlite:///./murder_mystery.db"
+    DATABASE_URL: str = ""
+
+    @property
+    def effective_database_url(self) -> str:
+        """未配置时默认使用 SQLite"""
+        return self.DATABASE_URL or "sqlite:///./murder_mystery.db"
 
     # Redis（Upstash / 本地）
     REDIS_URL: str = ""

@@ -18,6 +18,8 @@
         .pulse-glow { animation: pulse-glow 2s infinite; }
         .typing::after { content: '▊'; animation: blink 0.7s infinite; }
         @keyframes blink { 50% { opacity: 0; } }
+        @keyframes pulseOnce { 0% { opacity: 0; transform: translateY(5px); } 100% { opacity: 1; transform: translateY(0); } }
+        .animate-pulse-once { animation: pulseOnce 0.4s ease-out; }
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen">
@@ -42,9 +44,15 @@
                         <select v-model="selectedScene"
                             class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-sm appearance-none focus:border-amber-500 focus:outline-none pr-10">
                             <option value="random">🎲 随机场景</option>
+                            <option value="custom">✏️ 自定义场景</option>
                             <option v-for="sc in sceneList" :key="sc.value" :value="sc.value">{{ sc.emoji }} {{ sc.label }}</option>
                         </select>
                         <div class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">▾</div>
+                    </div>
+                    <!-- 自定义场景输入 -->
+                    <div v-if="selectedScene === 'custom'" class="mt-2">
+                        <textarea v-model="customScene" placeholder="描述你想要的案件场景，如：2030年火星基地，一名科学家在实验室离奇死亡..." rows="3"
+                            class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-sm focus:border-amber-500 focus:outline-none resize-none"></textarea>
                     </div>
                 </div>
                 <button @click="startGame" :disabled="loading || !nickname.trim()"
@@ -178,7 +186,17 @@
 
                 <!-- 提交推理 -->
                 <div class="mt-4 pt-3 border-t border-gray-800">
-                    <h3 class="font-bold mb-2 text-red-400">⚖️ 提交推理</h3>
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="font-bold text-red-400">⚖️ 提交推理</h3>
+                        <button @click="getHint" :disabled="hintLoading || hintsLeft <= 0"
+                            class="px-3 py-1 bg-amber-700/50 border border-amber-600/50 rounded-lg text-xs font-bold text-amber-300 hover:bg-amber-700 disabled:opacity-40 transition-all">
+                            {{ hintLoading ? '💡 思考中...' : '💡 提示 (' + hintsLeft + '/3)' }}
+                        </button>
+                    </div>
+                    <!-- 提示显示区 -->
+                    <div v-if="currentHint" class="mb-2 bg-amber-950/40 border border-amber-800/50 rounded-lg p-3 text-sm text-amber-200 animate-pulse-once">
+                        💡 {{ currentHint }}
+                    </div>
                     <select v-model="guessId" class="w-full px-3 py-2 bg-gray-800 rounded-lg text-sm mb-2 focus:outline-none">
                         <option value="">选择凶手</option>
                         <option v-for="s in game.suspects" :key="s.id" :value="s.id">{{ s.name }}</option>
@@ -234,6 +252,7 @@ createApp({
         const loading = ref(false);
         const stats = ref({ online: 0 });
         const selectedScene = ref('random');
+        const customScene = ref('');
 
         const sceneList = [
             { value: 'luxury_cruise', emoji: '🚢', label: '豪华远洋游轮' },
@@ -277,6 +296,11 @@ createApp({
         const judging = ref(false);
         const result = ref({});
 
+        // 提示系统
+        const hintsLeft = ref(3);
+        const currentHint = ref('');
+        const hintLoading = ref(false);
+
         const chatBox = ref(null);
 
         const currentChat = computed(() => {
@@ -310,11 +334,21 @@ createApp({
                     body: JSON.stringify({ nickname: nickname.value }),
                 });
                 // 开始游戏
-                const params = new URLSearchParams({
-                    nickname: nickname.value,
-                    scene: selectedScene.value,
-                });
-                const res = await fetch(`/api/game/start?${params}`, { method: 'POST' });
+                let res;
+                if (selectedScene.value === 'custom' && customScene.value.trim()) {
+                    const params = new URLSearchParams({ nickname: nickname.value });
+                    res = await fetch(`/api/game/start-custom?${params}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ custom_scene: customScene.value.trim() }),
+                    });
+                } else {
+                    const params = new URLSearchParams({
+                        nickname: nickname.value,
+                        scene: selectedScene.value,
+                    });
+                    res = await fetch(`/api/game/start?${params}`, { method: 'POST' });
+                }
                 const data = await res.json();
                 game.value = data;
                 gameId.value = data.game_id;
@@ -420,6 +454,25 @@ createApp({
             judging.value = false;
         }
 
+        async function getHint() {
+            if (hintsLeft.value <= 0 || hintLoading.value) return;
+            hintLoading.value = true;
+            currentHint.value = '';
+            try {
+                const res = await fetch('/api/game/hint', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ game_id: gameId.value }),
+                });
+                const data = await res.json();
+                currentHint.value = data.hint;
+                hintsLeft.value = data.hints_left;
+            } catch (e) {
+                currentHint.value = '暂时无法获取提示...';
+            }
+            hintLoading.value = false;
+        }
+
         function resetGame() {
             page.value = 'register';
             game.value = { title: '', setting: '', victim: {}, suspects: [], clues: [] };
@@ -429,6 +482,9 @@ createApp({
             guessId.value = '';
             reasoning.value = '';
             selectedSuspect.value = null;
+            hintsLeft.value = 3;
+            currentHint.value = '';
+            hintLoading.value = false;
         }
 
         async function scrollChat() {
@@ -446,13 +502,14 @@ createApp({
         });
 
         return {
-            page, nickname, loading, stats, selectedScene, sceneList,
+            page, nickname, loading, stats, selectedScene, customScene, sceneList,
             game, gameId, selectedSuspect, chatHistories, question, typing, rounds,
             clueQuery, cluesFound,
             guessId, reasoning, judging, result,
+            hintsLeft, currentHint, hintLoading,
             currentChat, totalRounds, chatBox,
             roundsLeft, suspectAvatar,
-            startGame, selectSuspect, sendQuestion, searchClue, submitGuess, resetGame,
+            startGame, selectSuspect, sendQuestion, searchClue, submitGuess, getHint, resetGame,
         };
     },
 }).mount('#app');

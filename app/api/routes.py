@@ -2,6 +2,7 @@ from __future__ import annotations
 """AI 剧本杀 - API 路由"""
 import uuid
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -12,6 +13,7 @@ from app.core.clue_manager import clue_manager
 from app.agents.script_generator import generate_script
 from app.agents.suspect_agent import interrogate
 from app.agents.judge_agent import judge
+from app.agents.hint_agent import give_hint
 from app.core.models import User, Game, ChatLog
 
 router = APIRouter()
@@ -22,6 +24,10 @@ router = APIRouter()
 class RegisterReq(BaseModel):
     nickname: str
     avatar: str = "🕵️"
+
+
+class StartGameReq(BaseModel):
+    custom_scene: str = ""
 
 
 class StartGameResp(BaseModel):
@@ -50,6 +56,10 @@ class SubmitGuessReq(BaseModel):
     reasoning: str
 
 
+class HintReq(BaseModel):
+    game_id: str
+
+
 # ---- API 接口 ----
 
 @router.post("/api/register")
@@ -72,7 +82,7 @@ def start_game(nickname: str = "侦探", scene: str = "random", db: Session = De
     # 1. 生成剧本
     scenario = generate_script(scene=scene)
 
-    # 2. 索引线索到 ChromaDB
+    # 2. 索引线索
     scenario_text = f"{scenario['setting']} 死者：{scenario['victim']['name']}"
     clue_manager.index_clues(game_id, scenario["clues"], scenario_text)
 
@@ -82,6 +92,7 @@ def start_game(nickname: str = "侦探", scene: str = "random", db: Session = De
         "chat_history": {},  # suspect_id -> [messages]
         "clues_found": [],
         "rounds": {},
+        "hints_used": 0,     # 已使用提示次数
     }, ttl=7200)  # 2小时
 
     # 4. 写入数据库
@@ -96,6 +107,63 @@ def start_game(nickname: str = "侦探", scene: str = "random", db: Session = De
     db.commit()
 
     # 5. 返回前端需要的数据（隐藏凶手标记和干扰项标记）
+    suspects_safe = []
+    for s in scenario["suspects"]:
+        suspects_safe.append({
+            "id": s["id"],
+            "name": s["name"],
+            "age": s["age"],
+            "occupation": s["occupation"],
+            "personality": s["personality"],
+            "alibi": s["alibi"],
+            "testimony": s["testimony"],
+        })
+
+    clues_safe = [{"id": c["id"], "description": c["description"], "location": c["location"]}
+                  for c in scenario["clues"]]
+
+    redis_mgr.incr_online()
+
+    return StartGameResp(
+        game_id=game_id,
+        title=scenario["title"],
+        setting=scenario["setting"],
+        victim=scenario["victim"],
+        suspects=suspects_safe,
+        clues=clues_safe,
+    )
+
+
+@router.post("/api/game/start-custom", response_model=StartGameResp)
+def start_game_custom(req: StartGameReq, nickname: str = "侦探", db: Session = Depends(get_db)) -> StartGameResp:
+    """开始自定义场景游戏"""
+    game_id = str(uuid.uuid4())[:8]
+
+    # 1. 用自定义场景生成剧本
+    scenario = generate_script(scene="custom", custom_scene=req.custom_scene)
+
+    # 2-5 同上
+    scenario_text = f"{scenario['setting']} 死者：{scenario['victim']['name']}"
+    clue_manager.index_clues(game_id, scenario["clues"], scenario_text)
+
+    redis_mgr.save_session(game_id, {
+        "scenario": scenario,
+        "chat_history": {},
+        "clues_found": [],
+        "rounds": {},
+        "hints_used": 0,
+    }, ttl=7200)
+
+    user = db.query(User).filter(User.nickname == nickname).first()
+    game = Game(
+        user_id=user.id if user else None,
+        title=scenario["title"],
+        scenario=scenario,
+        culprit_id=next(s["id"] for s in scenario["suspects"] if s.get("is_culprit")),
+    )
+    db.add(game)
+    db.commit()
+
     suspects_safe = []
     for s in scenario["suspects"]:
         suspects_safe.append({
@@ -173,6 +241,35 @@ def search_clue(req: SearchClueReq):
             redis_mgr.save_session(req.game_id, session)
         return {"found": True, "clue": result["description"]}
     return {"found": False, "message": "没有找到相关线索，试试换个方向搜索"}
+
+
+@router.post("/api/game/hint")
+def get_hint(req: HintReq):
+    """获取提示（最多3次）"""
+    session = redis_mgr.get_session(req.game_id)
+    if not session:
+        raise HTTPException(404, "游戏会话不存在或已过期")
+
+    hints_used = session.get("hints_used", 0)
+    if hints_used >= 3:
+        return {"hint": "已用完所有提示次数！", "hints_left": 0}
+
+    # 调用提示 Agent
+    hint_text = give_hint(
+        scenario=session["scenario"],
+        clues_found=session.get("clues_found", []),
+        chat_history=session.get("chat_history", {}),
+        hints_used=hints_used,
+    )
+
+    # 更新会话
+    session["hints_used"] = hints_used + 1
+    redis_mgr.save_session(req.game_id, session)
+
+    return {
+        "hint": hint_text,
+        "hints_left": 3 - hints_used - 1,
+    }
 
 
 @router.post("/api/game/submit")

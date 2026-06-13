@@ -1,8 +1,11 @@
 """AI 剧本杀 - Redis 缓存管理"""
 from __future__ import annotations
 import json
+import logging
 import redis
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class RedisManager:
@@ -22,6 +25,7 @@ class RedisManager:
                 )
             else:
                 # 本地开发或 URL 无效时用内存字典模拟
+                logger.warning("REDIS_URL 无效或未配置，降级为 FakeRedis（内存模式，进程重启后数据丢失）")
                 self._client = FakeRedis()
         return self._client
 

@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎭 AI 剧本杀 - 谁是凶手？</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans SC', sans-serif; }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        .chat-bubble { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 5px rgba(239,68,68,0.3); } 50% { box-shadow: 0 0 20px rgba(239,68,68,0.6); } }
+        .pulse-glow { animation: pulse-glow 2s infinite; }
+        .typing::after { content: '▊'; animation: blink 0.7s infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+<div id="app">
+
+    <!-- 注册页 -->
+    <div v-if="page === 'register'" class="flex items-center justify-center min-h-screen">
+        <div class="text-center">
+            <div class="text-7xl mb-6">🎭</div>
+            <h1 class="text-5xl font-black mb-2 bg-gradient-to-r from-red-500 to-amber-500 bg-clip-text text-transparent">
+                AI 剧本杀
+            </h1>
+            <p class="text-gray-400 mb-8 text-lg">审问嫌疑人，推理凶手，AI 实时生成剧本</p>
+            <div class="max-w-sm mx-auto space-y-4">
+                <input v-model="nickname" placeholder="输入你的侦探代号"
+                    class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-center text-lg focus:border-red-500 focus:outline-none"
+                    @keyup.enter="startGame">
+                <!-- 主题选择 -->
+                <div class="text-left">
+                    <label class="text-gray-400 text-sm mb-1 block">选择案件场景</label>
+                    <div class="relative">
+                        <select v-model="selectedScene"
+                            class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-sm appearance-none focus:border-amber-500 focus:outline-none pr-10">
+                            <option value="random">🎲 随机场景</option>
+                            <option v-for="sc in sceneList" :key="sc.value" :value="sc.value">{{ sc.emoji }} {{ sc.label }}</option>
+                        </select>
+                        <div class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">▾</div>
+                    </div>
+                </div>
+                <button @click="startGame" :disabled="loading || !nickname.trim()"
+                    class="w-full py-3 bg-gradient-to-r from-red-600 to-amber-600 rounded-xl text-lg font-bold hover:from-red-500 hover:to-amber-500 disabled:opacity-50 transition-all">
+                    {{ loading ? '🎭 AI 正在生成剧本...' : '开始调查' }}
+                </button>
+            </div>
+            <div class="mt-6 text-gray-500 text-sm">
+                🟢 {{ stats.online || 0 }} 位侦探在线
+            </div>
+        </div>
+    </div>
+
+    <!-- 游戏主页 -->
+    <div v-if="page === 'game'" class="max-w-6xl mx-auto p-4">
+        <!-- 顶部信息栏 -->
+        <div class="flex justify-between items-center mb-4 bg-gray-900 rounded-xl p-4">
+            <div>
+                <h2 class="text-xl font-bold text-red-400">📁 {{ game.title }}</h2>
+                <p class="text-gray-400 text-sm">{{ game.setting }}</p>
+            </div>
+            <div class="flex gap-4 text-sm">
+                <span class="bg-gray-800 px-3 py-1 rounded-lg">🔍 线索 {{ cluesFound.length }}</span>
+                <span class="bg-gray-800 px-3 py-1 rounded-lg">💬 审问 {{ totalRounds }}</span>
+            </div>
+        </div>
+
+        <!-- 死者信息 -->
+        <div class="bg-gray-900 rounded-xl p-4 mb-4 border border-red-900/50 pulse-glow">
+            <div class="flex items-center gap-3">
+                <span class="text-3xl">💀</span>
+                <div>
+                    <h3 class="font-bold text-red-400">{{ game.victim.name }}</h3>
+                    <p class="text-gray-400 text-sm">{{ game.victim.cause_of_death }} | {{ game.victim.time_of_death }} | {{ game.victim.location }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 嫌疑人卡片 -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <div v-for="s in game.suspects" :key="s.id"
+                @click="selectSuspect(s)"
+                :class="[
+                    'cursor-pointer rounded-xl p-4 transition-all border',
+                    selectedSuspect?.id === s.id
+                        ? 'bg-red-950/50 border-red-500 scale-105'
+                        : 'bg-gray-900 border-gray-800 hover:border-gray-600'
+                ]">
+                <div class="text-2xl mb-1">{{ suspectAvatar(s) }}</div>
+                <h4 class="font-bold text-sm">{{ s.name }}</h4>
+                <p class="text-gray-500 text-xs">{{ s.occupation }}</p>
+                <p class="text-gray-600 text-xs mt-1">{{ s.personality }}</p>
+                <div v-if="roundsLeft(s.id) !== null" class="mt-2 text-xs">
+                    <span :class="roundsLeft(s.id) > 0 ? 'text-green-500' : 'text-red-500'">
+                        剩余 {{ roundsLeft(s.id) }} 轮
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 审问区 + 线索区 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <!-- 对话区 -->
+            <div class="lg:col-span-2 bg-gray-900 rounded-xl flex flex-col" style="height: 450px;">
+                <div v-if="selectedSuspect" class="p-3 border-b border-gray-800 flex items-center gap-2">
+                    <span class="text-xl">{{ suspectAvatar(selectedSuspect) }}</span>
+                    <span class="font-bold">{{ selectedSuspect.name }}</span>
+                    <span class="text-gray-500 text-sm">· {{ selectedSuspect.testimony }}</span>
+                </div>
+                <div v-else class="p-3 border-b border-gray-800 text-gray-500">
+                    👈 选择一个嫌疑人开始审问
+                </div>
+
+                <!-- 对话内容 -->
+                <div class="flex-1 overflow-y-auto p-4 space-y-3" ref="chatBox">
+                    <div v-for="msg in currentChat" :key="msg.id"
+                        :class="['chat-bubble max-w-[80%]', msg.role === 'player' ? 'ml-auto' : 'mr-auto']">
+                        <div :class="[
+                            'px-4 py-2 rounded-2xl text-sm',
+                            msg.role === 'player'
+                                ? 'bg-blue-600 text-white rounded-br-sm'
+                                : 'bg-gray-800 text-gray-200 rounded-bl-sm'
+                        ]">
+                            {{ msg.content }}
+                        </div>
+                    </div>
+                    <div v-if="typing" class="chat-bubble mr-auto">
+                        <div class="px-4 py-2 rounded-2xl bg-gray-800 text-gray-400 text-sm typing">
+                            思考中
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 输入框 -->
+                <div class="p-3 border-t border-gray-800 flex gap-2">
+                    <input v-model="question" :placeholder="selectedSuspect ? `审问 ${selectedSuspect.name}...` : '先选择嫌疑人'"
+                        :disabled="!selectedSuspect || typing"
+                        class="flex-1 px-4 py-2 bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-red-500 disabled:opacity-50"
+                        @keyup.enter="sendQuestion">
+                    <button @click="sendQuestion" :disabled="!selectedSuspect || typing || !question.trim()"
+                        class="px-4 py-2 bg-red-600 rounded-xl text-sm font-bold hover:bg-red-500 disabled:opacity-50">
+                        审问
+                    </button>
+                </div>
+            </div>
+
+            <!-- 线索 & 搜索 -->
+            <div class="bg-gray-900 rounded-xl p-4 flex flex-col">
+                <h3 class="font-bold mb-3 text-amber-400">🔍 线索面板</h3>
+
+                <!-- 搜索线索 -->
+                <div class="flex gap-2 mb-3">
+                    <input v-model="clueQuery" placeholder="搜索线索..."
+                        class="flex-1 px-3 py-2 bg-gray-800 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-amber-500">
+                    <button @click="searchClue" :disabled="!clueQuery.trim()"
+                        class="px-3 py-2 bg-amber-600 rounded-lg text-sm font-bold hover:bg-amber-500 disabled:opacity-50">
+                        搜索
+                    </button>
+                </div>
+
+                <!-- 已发现线索 -->
+                <div class="flex-1 overflow-y-auto space-y-2">
+                    <div v-for="clue in cluesFound" :key="clue"
+                        class="bg-amber-950/30 border border-amber-900/50 rounded-lg p-3 text-sm">
+                        <span class="text-amber-400">📌</span> {{ clue }}
+                    </div>
+                    <div v-if="cluesFound.length === 0" class="text-gray-600 text-sm text-center mt-8">
+                        搜索关键词发现隐藏线索<br>如：凶器、时间线、动机
+                    </div>
+                </div>
+
+                <!-- 提交推理 -->
+                <div class="mt-4 pt-3 border-t border-gray-800">
+                    <h3 class="font-bold mb-2 text-red-400">⚖️ 提交推理</h3>
+                    <select v-model="guessId" class="w-full px-3 py-2 bg-gray-800 rounded-lg text-sm mb-2 focus:outline-none">
+                        <option value="">选择凶手</option>
+                        <option v-for="s in game.suspects" :key="s.id" :value="s.id">{{ s.name }}</option>
+                    </select>
+                    <textarea v-model="reasoning" placeholder="你的推理过程..." rows="3"
+                        class="w-full px-3 py-2 bg-gray-800 rounded-lg text-sm mb-2 focus:outline-none focus:ring-1 focus:ring-red-500 resize-none"></textarea>
+                    <button @click="submitGuess" :disabled="!guessId || !reasoning.trim() || judging"
+                        class="w-full py-2 bg-gradient-to-r from-red-600 to-amber-600 rounded-lg text-sm font-bold hover:from-red-500 hover:to-amber-500 disabled:opacity-50">
+                        {{ judging ? '⚖️ AI 评判中...' : '提交推理' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 结果页 -->
+    <div v-if="page === 'result'" class="flex items-center justify-center min-h-screen">
+        <div class="max-w-md mx-auto text-center">
+            <div class="text-8xl mb-4">{{ result.is_correct ? '🎉' : '💀' }}</div>
+            <h1 class="text-3xl font-black mb-2" :class="result.is_correct ? 'text-green-400' : 'text-red-400'">
+                {{ result.is_correct ? '推理正确！' : '推理失败...' }}
+            </h1>
+            <div class="text-5xl font-black mb-4" :class="result.is_correct ? 'text-amber-400' : 'text-gray-500'">
+                {{ result.score }} 分
+            </div>
+            <div class="bg-gray-900 rounded-xl p-5 text-left space-y-3 mb-6">
+                <div>
+                    <span class="text-red-400 font-bold">🔪 凶手：</span>{{ result.culprit_name }}
+                </div>
+                <div class="text-gray-300 text-sm leading-relaxed">
+                    {{ result.truth_reveal }}
+                </div>
+                <div class="text-amber-400 text-sm">
+                    💡 {{ result.tips }}
+                </div>
+            </div>
+            <button @click="resetGame"
+                class="px-8 py-3 bg-gradient-to-r from-red-600 to-amber-600 rounded-xl font-bold hover:from-red-500 hover:to-amber-500">
+                再来一局
+            </button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+const { createApp, ref, computed, nextTick, onMounted } = Vue;
+
+createApp({
+    setup() {
+        const page = ref('register');
+        const nickname = ref('');
+        const loading = ref(false);
+        const stats = ref({ online: 0 });
+        const selectedScene = ref('random');
+
+        const sceneList = [
+            { value: 'luxury_cruise', emoji: '🚢', label: '豪华远洋游轮' },
+            { value: 'snow_cabin', emoji: '🏔️', label: '雪山孤屋' },
+            { value: 'castle', emoji: '🏰', label: '中世纪古堡' },
+            { value: 'tech_party', emoji: '💻', label: '科技公司年会' },
+            { value: 'movie_premiere', emoji: '🎬', label: '电影首映礼后台' },
+            { value: 'archaeology', emoji: '🏛️', label: '考古发掘现场' },
+            { value: 'space_station', emoji: '🚀', label: '太空站' },
+            { value: 'casino', emoji: '🎰', label: '地下赌场' },
+            { value: 'concert_hall', emoji: '🎻', label: '音乐学院演奏厅' },
+            { value: 'old_mansion', emoji: '🏚️', label: '百年老宅遗产继承' },
+            { value: 'island_resort', emoji: '🏝️', label: '热带孤岛度假村' },
+            { value: 'night_store', emoji: '🏪', label: '深夜便利店' },
+            { value: 'art_gallery', emoji: '🖼️', label: '美术馆暗室' },
+            { value: 'train', emoji: '🚂', label: '跨国列车包厢' },
+            { value: 'asylum', emoji: '🏥', label: '废弃精神病院' },
+            { value: 'oil_rig', emoji: '🛢️', label: '海上石油钻井平台' },
+            { value: 'wine_cellar', emoji: '🍷', label: '地下酒窖' },
+            { value: 'magic_show', emoji: '🎩', label: '魔术秀后台' },
+            { value: 'esports', emoji: '🎮', label: '电竞决赛现场' },
+            { value: 'private_jet', emoji: '✈️', label: '私人飞机' },
+        ];
+
+        // 游戏数据
+        const game = ref({ title: '', setting: '', victim: {}, suspects: [], clues: [] });
+        const gameId = ref('');
+        const selectedSuspect = ref(null);
+        const chatHistories = ref({}); // suspect_id -> [{role, content}]
+        const question = ref('');
+        const typing = ref(false);
+        const rounds = ref({}); // suspect_id -> count
+
+        // 线索
+        const clueQuery = ref('');
+        const cluesFound = ref([]);
+
+        // 推理
+        const guessId = ref('');
+        const reasoning = ref('');
+        const judging = ref(false);
+        const result = ref({});
+
+        const chatBox = ref(null);
+
+        const currentChat = computed(() => {
+            if (!selectedSuspect.value) return [];
+            return chatHistories.value[selectedSuspect.value.id] || [];
+        });
+
+        const totalRounds = computed(() => {
+            return Object.values(rounds.value).reduce((a, b) => a + b, 0);
+        });
+
+        function roundsLeft(suspectId) {
+            if (rounds.value[suspectId] === undefined) return 5;
+            return 5 - rounds.value[suspectId];
+        }
+
+        function suspectAvatar(s) {
+            const avatars = ['👨‍💼', '👩‍🎤', '🧑‍🔬', '👨‍🍳', '👩‍⚕️', '🧑‍🎨'];
+            const idx = game.value.suspects.indexOf(s);
+            return avatars[idx % avatars.length];
+        }
+
+        async function startGame() {
+            if (!nickname.value.trim()) return;
+            loading.value = true;
+            try {
+                // 注册
+                await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nickname: nickname.value }),
+                });
+                // 开始游戏
+                const params = new URLSearchParams({
+                    nickname: nickname.value,
+                    scene: selectedScene.value,
+                });
+                const res = await fetch(`/api/game/start?${params}`, { method: 'POST' });
+                const data = await res.json();
+                game.value = data;
+                gameId.value = data.game_id;
+                page.value = 'game';
+            } catch (e) {
+                alert('生成剧本失败，请重试：' + e.message);
+            }
+            loading.value = false;
+        }
+
+        function selectSuspect(s) {
+            selectedSuspect.value = s;
+            if (!chatHistories.value[s.id]) {
+                chatHistories.value[s.id] = [];
+            }
+        }
+
+        async function sendQuestion() {
+            if (!selectedSuspect.value || !question.value.trim() || typing.value) return;
+            const q = question.value;
+            question.value = '';
+
+            // 添加玩家消息
+            chatHistories.value[selectedSuspect.value.id].push({
+                id: Date.now(),
+                role: 'player',
+                content: q,
+            });
+
+            typing.value = true;
+            await scrollChat();
+
+            try {
+                const res = await fetch('/api/game/interrogate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        game_id: gameId.value,
+                        suspect_id: selectedSuspect.value.id,
+                        question: q,
+                    }),
+                });
+                const data = await res.json();
+
+                chatHistories.value[selectedSuspect.value.id].push({
+                    id: Date.now() + 1,
+                    role: 'suspect',
+                    content: data.response,
+                });
+
+                rounds.value[selectedSuspect.value.id] = 5 - data.rounds_left;
+            } catch (e) {
+                chatHistories.value[selectedSuspect.value.id].push({
+                    id: Date.now() + 1,
+                    role: 'suspect',
+                    content: '（沉默不语...）',
+                });
+            }
+
+            typing.value = false;
+            await scrollChat();
+        }
+
+        async function searchClue() {
+            if (!clueQuery.value.trim()) return;
+            try {
+                const res = await fetch('/api/game/search-clue', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ game_id: gameId.value, query: clueQuery.value }),
+                });
+                const data = await res.json();
+                if (data.found) {
+                    cluesFound.value.push(data.clue);
+                    clueQuery.value = '';
+                } else {
+                    alert(data.message);
+                }
+            } catch (e) {
+                alert('搜索失败');
+            }
+        }
+
+        async function submitGuess() {
+            if (!guessId.value || !reasoning.value.trim()) return;
+            judging.value = true;
+            try {
+                const res = await fetch('/api/game/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        game_id: gameId.value,
+                        culprit_id: guessId.value,
+                        reasoning: reasoning.value,
+                    }),
+                });
+                const data = await res.json();
+                result.value = data;
+                page.value = 'result';
+            } catch (e) {
+                alert('提交失败');
+            }
+            judging.value = false;
+        }
+
+        function resetGame() {
+            page.value = 'register';
+            game.value = { title: '', setting: '', victim: {}, suspects: [], clues: [] };
+            chatHistories.value = {};
+            rounds.value = {};
+            cluesFound.value = [];
+            guessId.value = '';
+            reasoning.value = '';
+            selectedSuspect.value = null;
+        }
+
+        async function scrollChat() {
+            await nextTick();
+            if (chatBox.value) {
+                chatBox.value.scrollTop = chatBox.value.scrollHeight;
+            }
+        }
+
+        onMounted(async () => {
+            try {
+                const res = await fetch('/api/stats');
+                stats.value = await res.json();
+            } catch (e) {}
+        });
+
+        return {
+            page, nickname, loading, stats, selectedScene, sceneList,
+            game, gameId, selectedSuspect, chatHistories, question, typing, rounds,
+            clueQuery, cluesFound,
+            guessId, reasoning, judging, result,
+            currentChat, totalRounds, chatBox,
+            roundsLeft, suspectAvatar,
+            startGame, selectSuspect, sendQuestion, searchClue, submitGuess, resetGame,
+        };
+    },
+}).mount('#app');
+</script>
+</body>
+</html>

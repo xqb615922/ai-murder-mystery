@@ -310,7 +310,7 @@ def submit_guess(req: SubmitGuessReq, db: Session = Depends(get_db)):
         game.score = result.get("score", 0)
         game.rounds_played = sum(session["rounds"].values())
         game.clues_found = len(session["clues_found"])
-        game.finished_at = datetime.utcnow()
+        game.finished_at = datetime.now()
         db.commit()
 
     # 更新排行榜

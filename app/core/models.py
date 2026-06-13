@@ -13,7 +13,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     nickname = Column(String(50), unique=True, nullable=False)
     avatar = Column(String(200), default="🕵️")
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime, server_default=func.timezone('Asia/Shanghai', func.now()))
     total_games = Column(Integer, default=0)
     wins = Column(Integer, default=0)
 
@@ -49,7 +49,7 @@ class ChatLog(Base):
     suspect_id = Column(String(50))            # 嫌疑人 ID
     role = Column(String(20))                  # player / suspect
     content = Column(Text)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime, server_default=func.timezone('Asia/Shanghai', func.now()))
 
 
 class Leaderboard(Base):
@@ -62,4 +62,4 @@ class Leaderboard(Base):
     wins = Column(Integer, default=0)
     win_rate = Column(Float, default=0)
     avg_score = Column(Float, default=0)
-    updated_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.timezone('Asia/Shanghai', func.now()))

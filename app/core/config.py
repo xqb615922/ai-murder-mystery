@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     # Redis（Upstash / 本地）
     REDIS_URL: str = ""
 
-    # ChromaDB
-    CHROMA_PERSIST_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "chroma_data")
+    # ChromaDB (已移除，改用内存关键词匹配)
+    # CHROMA_PERSIST_DIR: str = ""
 
     # 游戏配置
     MAX_ROUNDS: int = 5          # 每个嫌疑人最多审问轮数

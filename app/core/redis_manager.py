@@ -17,7 +17,7 @@ class RedisManager:
     @property
     def client(self) -> redis.Redis:
         if self._client is None:
-            if settings.REDIS_URL and settings.REDIS_URL.startswith(("redis-cli")):
+            if settings.REDIS_URL and settings.REDIS_URL.startswith(("redis://", "rediss://")):
                 self._client = redis.from_url(
                     settings.REDIS_URL,
                     decode_responses=True,
